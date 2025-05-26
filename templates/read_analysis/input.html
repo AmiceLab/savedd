@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR App</title>
+</head>
+<body>
+    <h1>Upload Image for OCR</h1>
+    <h2>Take a photo or select a image from album</h2>
+    <form id="upload-form" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label for="id_image">Upload Image:</label>
+        <input type="file" id="id_image" accept="image/*">
+        <button type="submit">Upload Image</button>
+    </form>
+hi1
+<!-- Display extracted text and lightness -->
+<div id="results">
+<!--from Javascript-->
+</div>
+
+
+    <script>
+        document.getElementById("upload-form").addEventListener("submit", async function(event) {
+            event.preventDefault();  // Prevent page refresh
+        
+            const fileInput = document.getElementById("id_image");
+            const file = fileInput.files[0];
+        
+            if (!file) return;
+        
+            const maxSize = 1 * 1024 * 1024; // 1MB limit
+            const formData = new FormData();
+            formData.append("csrfmiddlewaretoken", document.querySelector("[name=csrfmiddlewaretoken]").value);
+        
+            if (file.size > maxSize) {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+        
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.src = event.target.result;
+        
+                    img.onload = function() {
+                        const canvas = document.createElement("canvas");
+                        const ctx = canvas.getContext("2d");
+        
+                        let width = img.width;
+                        let height = img.height;
+                        let scaleFactor = Math.sqrt(maxSize / file.size); // Resize ratio
+        
+                        width = Math.round(width * scaleFactor);
+                        height = Math.round(height * scaleFactor);
+        
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(img, 0, 0, width, height);
+        
+                        canvas.toBlob((blob) => {
+                            formData.append("image", blob, "resized_image.jpg");
+                            sendData(formData);
+                        }, "image/jpeg", 0.8);
+                    };
+                };
+            } else {
+                formData.append("image", file);
+                sendData(formData);
+            }
+        });
+        
+        async function sendData(formData) {
+            const response = await fetch("{% url 'ocr_view' %}", {
+                method: "POST",
+                body: formData
+            });
+        
+            const data = await response.json();
+        
+            // Update results without page refresh
+            document.getElementById("results").innerHTML = `
+                <p>${data.lightness}</p>
+
+                <h2>Extracted Text</h2>
+                ${data.extracted_text.map(item => `<p>${item[0]} - $${item[1]}</p>`).join('')}
+
+                <table border="1">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.extracted_text.map(item => `
+                            <tr>
+                                <td>${item[0]}</td>
+                                <td>${item[1]}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+        }
+        </script>
+
+
+</body>
+</html>

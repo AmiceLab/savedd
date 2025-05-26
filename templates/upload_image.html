@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR App</title>
+</head>
+<body>
+    <h1>Upload Image for OCR</h1>
+    <h2> 使用手機攝像頭拍照或選擇圖片 - 2 Try with CHatGPT</h2>
+    <form id="upload-form" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label for="id_image">Upload Image:</label>
+        <input type="file" id="id_image" accept="image/*">
+        <button type="submit">Upload Image</button>
+    </form>
+
+<p id="status"></p>
+
+<script>
+document.getElementById("upload-form").addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const fileInput = document.getElementById("id_image");
+    if (!fileInput.files.length) {
+        alert("Please select an image");
+        return;
+    }
+
+    const file = fileInput.files[0];
+
+    try {
+        const resizedBlob = await resizeImage(file, 1 * 1024 * 1024); // Resize to max 1MB
+        const formData = new FormData();
+        formData.append("image", resizedBlob, file.name);
+        formData.append("csrfmiddlewaretoken", "{{ csrf_token }}");
+
+        const response = await fetch("{% url 'upload_image' %}", { method: "POST", body: formData });
+        const data = await response.json();
+        
+        document.getElementById("status").innerText = "Upload successful!";
+    } catch (error) {
+        console.error("Upload failed", error);
+        alert("Error uploading image");
+    }
+});
+
+/**
+ * Resizes an image to ensure the file size does not exceed maxSize.
+ * Returns a Blob object.
+ */
+async function resizeImage(file, maxSize) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = event => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+                
+                let width = img.width;
+                let height = img.height;
+                const scaleFactor = Math.sqrt(maxSize / file.size);
+                
+                // Resize proportionally
+                canvas.width = width * scaleFactor;
+                canvas.height = height * scaleFactor;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                canvas.toBlob(blob => {
+                    if (blob.size > maxSize) {
+                        reject("Failed to resize image below 1MB");
+                    } else {
+                        resolve(blob);
+                    }
+                }, "image/jpeg", 0.8); // Adjust quality if needed
+            };
+        };
+        reader.onerror = error => reject(error);
+    });
+}
+</script>
+
+</body>
+</html>
